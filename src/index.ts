@@ -144,7 +144,7 @@ export default function kiroProviderExtension(pi: ExtensionAPI): void {
       headers: providerHeaders,
       models: providerModels,
       refreshModels: async (context: RefreshModelsContext) => {
-        const discoveredModels = await refreshModels(context);
+        const discoveredModels = await refreshModels({ ...context, profileArn: context.profileArn ?? config.profileArn });
         return discoveredModels.map((model) => ({
           ...model,
           ...(model.headers ? { headers: omitAuthorizationHeaders(model.headers) } : {}),
@@ -165,6 +165,7 @@ export default function kiroProviderExtension(pi: ExtensionAPI): void {
     try {
       discoveredModels = await discoverKiroModels({
         credential,
+        profileArn: config.profileArn,
         allowNetwork: true,
         force: true,
         store: { read: async () => undefined, write: async () => undefined },

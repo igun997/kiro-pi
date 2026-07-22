@@ -137,17 +137,31 @@ test("provider registration refreshes models from live discovery before session 
 
 test("provider registration refreshes models from live discovery after auth readiness", async () => {
   const originalFetch = globalThis.fetch;
+  let request;
   try {
-    globalThis.fetch = async () => new Response(JSON.stringify({
-      models: [{ modelId: "post-login-model", modelName: "Post Login Model" }],
-    }), { status: 200 });
+    globalThis.fetch = async (_url, options) => {
+      request = { headers: options.headers, body: JSON.parse(options.body) };
+      if (!request.body.profileArn) return new Response(JSON.stringify({ message: "Invalid profileArn." }), { status: 400 });
+      return new Response(JSON.stringify({
+        models: [{ modelId: "gpt-5.6-luna", modelName: "GPT-5.6 Luna" }],
+      }), { status: 200 });
+    };
 
     const { pi, registeredProviders } = createFakeExtensionApi();
     kiroProviderExtension(pi);
-    pi.events.emit(MULTI_AUTH_PROVIDERS_REGISTERED_EVENT, { generation: 1, credential: { type: "oauth", access: "test-access", region: "us-east-1" } });
+    pi.events.emit(MULTI_AUTH_PROVIDERS_REGISTERED_EVENT, {
+      generation: 1,
+      credential: {
+        type: "oauth",
+        access: "test-access",
+        region: "us-east-1",
+        profileArn: "arn:aws:codewhisperer:us-east-1:123:profile/test",
+      },
+    });
     await new Promise((resolve) => setImmediate(resolve));
 
-    assert.ok(registeredProviders.some(({ config }) => config.models?.some((model) => model.id === "post-login-model")));
+    assert.equal(request.body.profileArn, "arn:aws:codewhisperer:us-east-1:123:profile/test");
+    assert.ok(registeredProviders.some(({ config }) => config.models?.some((model) => model.id === "gpt-5.6-luna")));
   } finally {
     globalThis.fetch = originalFetch;
   }

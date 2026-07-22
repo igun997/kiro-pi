@@ -5,9 +5,11 @@ import { join } from "node:path";
 import type { Credential } from "@earendil-works/pi-ai";
 
 import { KIRO_API, type ExtensionConfig, type KiroProviderModelConfig } from "./config.js";
+import { profileArnFromCredentials } from "./shared/credentials.js";
 
 export interface RefreshModelsContext {
   credential?: Credential;
+  profileArn?: string;
   allowNetwork: boolean;
   force?: boolean;
   signal?: AbortSignal;
@@ -239,11 +241,13 @@ function requireNodeSqlite(): typeof import("node:sqlite") | undefined {
 function authFromContext(context: RefreshModelsContext): KiroCliAuth | undefined {
   const credential = context.credential;
   if (credential?.type === "oauth" && nonEmptyString(credential.access)) {
+    const localAuth = readKiroCliAuth();
+    const profileArn = profileArnFromCredentials(credential) ?? nonEmptyString(context.profileArn) ?? localAuth?.profileArn ?? profileFromSqlite();
     return {
       accessToken: credential.access,
-      region: nonEmptyString(credential.region) ?? DEFAULT_REGION,
-      profileArn: nonEmptyString(credential.profileArn),
-      authMethod: nonEmptyString(credential.authMethod),
+      region: nonEmptyString(credential.region) ?? localAuth?.region ?? DEFAULT_REGION,
+      ...(profileArn ? { profileArn } : {}),
+      authMethod: nonEmptyString(credential.authMethod) ?? localAuth?.authMethod,
     };
   }
   const auth = readKiroCliAuth();

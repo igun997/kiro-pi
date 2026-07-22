@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 const buildDir = process.env.PI_KIRO_PROVIDER_BUILD_DIR;
 if (!buildDir) throw new Error("PI_KIRO_PROVIDER_BUILD_DIR is required.");
 const fromBuild = (path) => pathToFileURL(join(buildDir, path)).href;
-const { normalizeDiscoveredModels, readKiroCliAuth } = await import(fromBuild("src/model-discovery.js"));
+const { discoverKiroModels, normalizeDiscoveredModels, readKiroCliAuth } = await import(fromBuild("src/model-discovery.js"));
 
 test("normalizeDiscoveredModels maps Kiro catalog metadata to Pi models", () => {
   const models = normalizeDiscoveredModels({
@@ -41,6 +41,29 @@ test("normalizeDiscoveredModels maps Kiro catalog metadata to Pi models", () => 
     rateUnit: "Credit",
     importOwnership: "model-discovery",
   });
+});
+
+test("OAuth discovery uses supplied profile ARN when credential omits it", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestBody;
+  try {
+    globalThis.fetch = async (_url, options) => {
+      requestBody = JSON.parse(options.body);
+      return new Response(JSON.stringify({ models: [{ modelId: "gpt-5.6-luna", modelName: "GPT-5.6 Luna" }] }), { status: 200 });
+    };
+
+    const models = await discoverKiroModels({
+      credential: { type: "oauth", access: "test-access", region: "us-east-1" },
+      profileArn: "arn:aws:codewhisperer:us-east-1:123:profile/test",
+      allowNetwork: true,
+      store: { read: async () => undefined, write: async () => undefined },
+    });
+
+    assert.equal(requestBody.profileArn, "arn:aws:codewhisperer:us-east-1:123:profile/test");
+    assert.equal(models[0].id, "gpt-5.6-luna");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("readKiroCliAuth reads token and profile from injected SQLite rows without exposing storage paths", () => {
