@@ -2,14 +2,14 @@ import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import type { Api, AssistantMessage, AssistantMessageEvent, AssistantMessageEventStream, Context, Model, SimpleStreamOptions } from "@earendil-works/pi-ai";
+import type { Api, AssistantMessage, AssistantMessageEvent, AssistantMessageEventStream, Context, Credential, Model, SimpleStreamOptions } from "@earendil-works/pi-ai";
 import type { OAuthCredentials, OAuthLoginCallbacks } from "@earendil-works/pi-ai/oauth";
 import { KIRO_API, type ExtensionConfig, loadConfig } from "./config.js";
 import { DebugLogger } from "./debug-logger.js";
 import type { DebugLogger as DebugLoggerInstance } from "./debug-logger.js";
 import { omitAuthorizationHeaders } from "./headers.js";
 import { createKiroOAuthProvider } from "./oauth.js";
-import { createKiroModelRefresher, type RefreshModelsContext } from "./model-discovery.js";
+import { createKiroModelRefresher, discoverKiroModels, type RefreshModelsContext } from "./model-discovery.js";
 
 const EXTENSION_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const RUNTIME_PROVIDER_REGISTRATION_EVENT = "pi-multi-auth:runtime-provider-registration";
@@ -17,6 +17,27 @@ const MULTI_AUTH_PROVIDERS_REGISTERED_EVENT = "pi-multi-auth:providers-registere
 
 type KiroRuntimeState = { cwd?: string };
 type KiroStreamModule = typeof import("./kiro.js");
+
+function credentialFromEvent(payload: unknown): Credential | undefined {
+  if (!payload || typeof payload !== "object") return undefined;
+  const value = payload as Record<string, unknown>;
+  const candidates = [value.credential, value.credentials, value.auth];
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== "object") continue;
+    const credential = candidate as Record<string, unknown>;
+    if (credential.type === "oauth" && typeof credential.access === "string" && credential.access.length > 0) {
+      return credential as unknown as Credential;
+    }
+    const kiro = credential.kiro;
+    if (kiro && typeof kiro === "object") {
+      const nested = kiro as Record<string, unknown>;
+      if (nested.type === "oauth" && typeof nested.access === "string" && nested.access.length > 0) {
+        return nested as unknown as Credential;
+      }
+    }
+  }
+  return undefined;
+}
 type KiroStreamSimple = (model: Model<Api>, context: Context, options?: SimpleStreamOptions) => AssistantMessageEventStream;
 
 function createLazyModule<T>(importer: () => Promise<T>): { load(): Promise<T> } {
@@ -80,7 +101,7 @@ export default function kiroProviderExtension(pi: ExtensionAPI): void {
   const streamSimple = createLazyKiroStream(config, runtime, logger);
   const providerHeaders = omitAuthorizationHeaders(config.headers);
   const refreshModels = createKiroModelRefresher(config, config.models, logger);
-  const providerModels = config.models.map((model) => ({
+  let providerModels = config.models.map((model) => ({
     ...model,
     ...(model.headers ? { headers: omitAuthorizationHeaders(model.headers) } : {}),
   }));
@@ -112,9 +133,65 @@ export default function kiroProviderExtension(pi: ExtensionAPI): void {
     });
   };
 
-  pi.on("session_start", (_event, ctx) => {
+  const registerProvider = (): void => {
+    pi.registerProvider(config.providerId, {
+      name: config.displayName,
+      baseUrl: config.upstreamUrl,
+      apiKey: config.apiKey,
+      api: KIRO_API,
+      authHeader: false,
+      streamSimple,
+      headers: providerHeaders,
+      models: providerModels,
+      refreshModels: async (context: RefreshModelsContext) => {
+        const discoveredModels = await refreshModels(context);
+        return discoveredModels.map((model) => ({
+          ...model,
+          ...(model.headers ? { headers: omitAuthorizationHeaders(model.headers) } : {}),
+        }));
+      },
+      oauth: {
+        name: oauthProvider.name,
+        login: (callbacks: OAuthLoginCallbacks) => oauthProvider.login(callbacks),
+        refreshToken: (credentials: OAuthCredentials) => oauthProvider.refreshToken(credentials),
+        getApiKey: (credentials: OAuthCredentials) => oauthProvider.getApiKey(credentials),
+        modifyModels: (models: Model<Api>[], credentials: OAuthCredentials) => oauthProvider.modifyModels?.(models, credentials) ?? models,
+      },
+    } as unknown as Parameters<ExtensionAPI["registerProvider"]>[1]);
+  };
+
+  const refreshAndRegister = async (credential?: Credential): Promise<void> => {
+    let discoveredModels: ExtensionConfig["models"];
+    try {
+      discoveredModels = await discoverKiroModels({
+        credential,
+        allowNetwork: true,
+        force: true,
+        store: { read: async () => undefined, write: async () => undefined },
+      });
+    } catch (error) {
+      logger.warn("model_discovery_refresh_failed", {
+        providerId: config.providerId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return;
+    }
+    if (discoveredModels.length === 0) return;
+    const nextModels = discoveredModels.map((model) => ({
+      ...model,
+      ...(model.headers ? { headers: omitAuthorizationHeaders(model.headers) } : {}),
+    }));
+    if (JSON.stringify(nextModels) === JSON.stringify(providerModels)) return;
+    providerModels = nextModels;
+    registerProvider();
+    emitRuntimeProviderRegistration(true);
+  };
+
+  pi.on("session_start", (event, ctx) => {
     runtime.cwd = ctx.cwd;
     emitRuntimeProviderRegistration(true);
+    const candidate = event as unknown as { credential?: Credential };
+    void refreshAndRegister(candidate?.credential);
   });
 
   pi.on("before_agent_start", (_event, ctx) => {
@@ -123,35 +200,13 @@ export default function kiroProviderExtension(pi: ExtensionAPI): void {
     return {};
   });
 
-  pi.events?.on(MULTI_AUTH_PROVIDERS_REGISTERED_EVENT, () => {
+  pi.events?.on(MULTI_AUTH_PROVIDERS_REGISTERED_EVENT, (event: unknown) => {
     emitRuntimeProviderRegistration(true);
+    void refreshAndRegister(credentialFromEvent(event));
   });
 
   // Pi 0.80 typings predate refreshModels; Pi 0.81 runtime consumes this field.
-  pi.registerProvider(config.providerId, {
-    name: config.displayName,
-    baseUrl: config.upstreamUrl,
-    apiKey: config.apiKey,
-    api: KIRO_API,
-    authHeader: false,
-    streamSimple,
-    headers: providerHeaders,
-    models: providerModels,
-    refreshModels: async (context: RefreshModelsContext) => {
-      const discoveredModels = await refreshModels(context);
-      return discoveredModels.map((model) => ({
-        ...model,
-        ...(model.headers ? { headers: omitAuthorizationHeaders(model.headers) } : {}),
-      }));
-    },
-    oauth: {
-      name: oauthProvider.name,
-      login: (callbacks: OAuthLoginCallbacks) => oauthProvider.login(callbacks),
-      refreshToken: (credentials: OAuthCredentials) => oauthProvider.refreshToken(credentials),
-      getApiKey: (credentials: OAuthCredentials) => oauthProvider.getApiKey(credentials),
-      modifyModels: (models: Model<Api>[], credentials: OAuthCredentials) => oauthProvider.modifyModels?.(models, credentials) ?? models,
-    },
-  } as unknown as Parameters<ExtensionAPI["registerProvider"]>[1]);
+  registerProvider();
   emitRuntimeProviderRegistration(true);
 
   logger.debug("provider_registered", {

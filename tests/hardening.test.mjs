@@ -111,6 +111,75 @@ test("runtime provider registration replays after multi-auth readiness and befor
   assert.equal(typeof runtimeEvents()[2].payload.streamSimple, "function");
 });
 
+test("provider registration refreshes models from live discovery before session use", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => new Response(JSON.stringify({
+      models: [{
+        modelId: "live-model",
+        modelName: "Live Model",
+        tokenLimits: { maxInputTokens: 123456 },
+        rateMultiplier: 1.5,
+        rateUnit: "Credit",
+      }],
+    }), { status: 200 });
+
+    const { pi, lifecycleHandlers, registeredProviders } = createFakeExtensionApi();
+    kiroProviderExtension(pi);
+    lifecycleHandlers.get("session_start")?.[0]?.({ type: "session_start", reason: "startup", credential: { type: "oauth", access: "test-access", region: "us-east-1" } }, { cwd: "/tmp/project" });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.ok(registeredProviders.some(({ config }) => config.models?.some((model) => model.id === "live-model")));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("provider registration refreshes models from live discovery after auth readiness", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => new Response(JSON.stringify({
+      models: [{ modelId: "post-login-model", modelName: "Post Login Model" }],
+    }), { status: 200 });
+
+    const { pi, registeredProviders } = createFakeExtensionApi();
+    kiroProviderExtension(pi);
+    pi.events.emit(MULTI_AUTH_PROVIDERS_REGISTERED_EVENT, { generation: 1, credential: { type: "oauth", access: "test-access", region: "us-east-1" } });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.ok(registeredProviders.some(({ config }) => config.models?.some((model) => model.id === "post-login-model")));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+
+test("failed live refresh preserves the last successful model catalog", async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  try {
+    globalThis.fetch = async () => {
+      calls += 1;
+      if (calls === 1) return new Response(JSON.stringify({ models: [{ modelId: "stable-model", modelName: "Stable Model" }] }), { status: 200 });
+      return new Response("unavailable", { status: 503 });
+    };
+
+    const { pi, lifecycleHandlers, registeredProviders } = createFakeExtensionApi();
+    kiroProviderExtension(pi);
+    const credential = { type: "oauth", access: "test-access", region: "us-east-1" };
+    lifecycleHandlers.get("session_start")?.[0]?.({ type: "session_start", reason: "startup", credential }, { cwd: "/tmp/project" });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(registeredProviders.at(-1)?.config.models?.[0]?.id, "stable-model");
+
+    pi.events.emit(MULTI_AUTH_PROVIDERS_REGISTERED_EVENT, { credential });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(registeredProviders.at(-1)?.config.models?.[0]?.id, "stable-model");
+    assert.equal(calls, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("static, model, and request Authorization headers cannot override managed credentials", () => {
   const { config, warnings } = loadConfig(writeConfig({
     headers: { Authorization: "Bearer static-secret", "x-safe": "top" },

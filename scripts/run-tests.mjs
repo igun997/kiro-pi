@@ -23,7 +23,7 @@ try {
     writeFileSync(join(buildDir, "package.json"), JSON.stringify({ type: "module" }), "utf-8");
     const nodeModulesPath = join(root, "node_modules");
     if (existsSync(nodeModulesPath)) symlinkSync(nodeModulesPath, join(buildDir, "node_modules"), "junction");
-    const test = spawnSync(process.execPath, ["--test", "tests/*.test.mjs"], {
+    const test = spawnSync(process.execPath, ["--test", "--test-concurrency=1", "tests/*.test.mjs"], {
       cwd: root,
       stdio: "inherit",
       env: { ...process.env, PI_KIRO_PROVIDER_BUILD_DIR: buildDir },

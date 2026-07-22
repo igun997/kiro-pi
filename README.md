@@ -138,7 +138,7 @@ Kiro CLI credentials are read-only and currently used for live model discovery. 
 
 Provider never writes or refreshes Kiro CLI files. If CLI authentication expires, authenticate again with `kiro-cli` or use `/login kiro` for Pi.
 
-When network discovery is available, `kiro-pi` calls Kiro's regional management endpoint and imports account-visible model IDs, display names, context limits, reasoning levels, and rate metadata. If discovery fails or runs without valid local CLI auth, built-in fallback models remain available.
+When network discovery is available, `kiro-pi` calls Kiro's regional management endpoint and imports account-visible model IDs, display names, context limits, reasoning levels, and rate metadata. Discovery refreshes at provider startup, session start/reload, and multi-auth readiness events. If discovery fails or runs without valid local CLI or event-provided auth, the last-known or built-in fallback models remain available.
 
 > Discovery sends the bearer token to Kiro's management endpoint. Credential values are never logged.
 
