@@ -9,7 +9,7 @@ import { DebugLogger } from "./debug-logger.js";
 import type { DebugLogger as DebugLoggerInstance } from "./debug-logger.js";
 import { omitAuthorizationHeaders } from "./headers.js";
 import { createKiroOAuthProvider } from "./oauth.js";
-import { createKiroModelRefresher, discoverKiroModels, type RefreshModelsContext } from "./model-discovery.js";
+import { createKiroModelRefresher, attachProfileArnToModels, discoverKiroModels, readKiroCliAuth, type RefreshModelsContext } from "./model-discovery.js";
 
 const EXTENSION_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const RUNTIME_PROVIDER_REGISTRATION_EVENT = "pi-multi-auth:runtime-provider-registration";
@@ -101,7 +101,8 @@ export default function kiroProviderExtension(pi: ExtensionAPI): void {
   const streamSimple = createLazyKiroStream(config, runtime, logger);
   const providerHeaders = omitAuthorizationHeaders(config.headers);
   const refreshModels = createKiroModelRefresher(config, config.models, logger);
-  let providerModels = config.models.map((model) => ({
+  const startupProfileArn = config.profileArn ?? readKiroCliAuth()?.profileArn;
+  let providerModels = attachProfileArnToModels(config.models, startupProfileArn).map((model) => ({
     ...model,
     ...(model.headers ? { headers: omitAuthorizationHeaders(model.headers) } : {}),
   }));

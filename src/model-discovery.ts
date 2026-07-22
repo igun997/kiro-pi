@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { Credential } from "@earendil-works/pi-ai";
 
 import { KIRO_API, type ExtensionConfig, type KiroProviderModelConfig } from "./config.js";
-import { profileArnFromCredentials } from "./shared/credentials.js";
+import { KIRO_PROFILE_ARN_HEADER, profileArnFromCredentials } from "./shared/credentials.js";
 
 export interface RefreshModelsContext {
   credential?: Credential;
@@ -177,9 +177,17 @@ function positiveNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
 }
 
+export function attachProfileArnToModels(models: KiroProviderModelConfig[], profileArn?: string): KiroProviderModelConfig[] {
+  if (!profileArn) return models;
+  return models.map((model) => ({
+    ...model,
+    headers: { ...(model.headers ?? {}), [KIRO_PROFILE_ARN_HEADER]: profileArn },
+  }));
+}
+
 export function normalizeDiscoveredModels(response: { models?: unknown; defaultModel?: unknown }, profileArn?: string): KiroProviderModelConfig[] {
   if (!Array.isArray(response.models)) return [];
-  const profileHeaders = profileArn ? { ["x-kiro-profile-arn"]: profileArn } : undefined;
+  const profileHeaders = profileArn ? { [KIRO_PROFILE_ARN_HEADER]: profileArn } : undefined;
   return response.models.flatMap((raw): KiroProviderModelConfig[] => {
     if (!isRecord(raw)) return [];
     const model = raw as DiscoveredModel;
