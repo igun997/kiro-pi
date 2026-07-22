@@ -1,0 +1,41 @@
+{
+  "enabled": true,
+  "debug": false,
+  "providerId": "kiro",
+  "displayName": "Kiro",
+  "upstreamUrl": "https://codewhisperer.us-east-1.amazonaws.com/generateAssistantResponse",
+  "endpoint": "codewhisperer",
+  "apiKey": "$KIRO_ACCESS_TOKEN",
+  "requestTimeoutMs": 600000,
+  "profileArn": "",
+  "headers": {},
+  "oauth": {
+    "region": "us-east-1",
+    "startUrl": "https://view.awsapps.com/start",
+    "clientName": "kiro-oauth-client",
+    "clientType": "public",
+    "scopes": [
+      "codewhisperer:completions",
+      "codewhisperer:analysis",
+      "codewhisperer:conversations"
+    ],
+    "grantTypes": [
+      "urn:ietf:params:oauth:grant-type:device_code",
+      "refresh_token"
+    ],
+    "issuerUrl": "https://identitycenter.amazonaws.com/ssoins-722374e8c3c8e6c6",
+    "skipIssuerUrlForRegistration": false,
+    "socialPortalUrl": "https://app.kiro.dev/signin",
+    "socialPortalRedirectUri": "http://localhost:3128",
+    "socialCallbackPath": "/oauth/callback",
+    "socialAuthorizeUrl": "https://prod.us-east-1.auth.desktop.kiro.dev/login",
+    "socialTokenUrl": "https://prod.us-east-1.auth.desktop.kiro.dev/oauth/token",
+    "socialRefreshUrl": "https://prod.us-east-1.auth.desktop.kiro.dev/refreshToken",
+    "socialRedirectUri": "kiro://kiro.kiroAgent/authenticate-success",
+    "methodLabels": {
+      "builder-id": "AWS Builder ID",
+      "google": "Google",
+      "github": "GitHub"
+    }
+  }
+}

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">Kiro Pi frog mark</title>
+  <desc id="desc">Original green frog face icon for Kiro Pi.</desc>
+  <path fill="#78c850" stroke="#1f2937" stroke-width="5" stroke-linejoin="round" d="M20 48C20 28 35 18 52 25c8-7 16-7 24 0 17-7 32 3 32 23v27c0 20-16 34-36 34H56c-20 0-36-14-36-34V48Z"/>
+  <circle cx="43" cy="39" r="13" fill="#f5f7eb" stroke="#1f2937" stroke-width="4"/>
+  <circle cx="85" cy="39" r="13" fill="#f5f7eb" stroke="#1f2937" stroke-width="4"/>
+  <circle cx="43" cy="40" r="5" fill="#1f2937"/>
+  <circle cx="85" cy="40" r="5" fill="#1f2937"/>
+  <path fill="none" stroke="#1f2937" stroke-width="5" stroke-linecap="round" d="M42 68c11 10 33 10 44 0"/>
+  <path fill="none" stroke="#1f2937" stroke-width="4" stroke-linecap="round" d="M28 61h-9m90 0h-9"/>
+</svg>
