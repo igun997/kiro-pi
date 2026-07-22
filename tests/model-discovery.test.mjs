@@ -33,6 +33,7 @@ test("normalizeDiscoveredModels maps Kiro catalog metadata to Pi models", () => 
     api: "kiro",
     reasoning: true,
     thinkingLevelMap: { off: null, minimal: "low", low: "low", medium: "high", high: "high", xhigh: "high" },
+    effortSchemaPath: "reasoning",
     input: ["text", "image"],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 250000,

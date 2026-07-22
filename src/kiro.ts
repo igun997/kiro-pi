@@ -88,10 +88,11 @@ interface KiroRequest {
     agentTaskType?: "vibe" | string;
   };
   profileArn?: string;
+  additionalModelRequestFields?: Record<string, unknown>;
   inferenceConfig?: {
     maxTokens?: number;
     temperature?: number;
-    };
+  };
 }
 
 interface KiroStreamState {
@@ -457,6 +458,20 @@ function resolveMaxTokens(model: Model<Api>, options?: SimpleStreamOptions): num
   return Math.max(1, Math.min(requested, API_MAX_OUTPUT_TOKENS));
 }
 
+type KiroReasoningModel = Model<Api> & {
+  effortSchemaPath?: "reasoning" | "output_config";
+  thinkingLevelMap?: Partial<Record<string, string | null>>;
+};
+
+function effortRequestFields(model: Model<Api>, options?: SimpleStreamOptions): Record<string, unknown> | undefined {
+  const reasoning = options?.reasoning as string | undefined;
+  const kiroModel = model as KiroReasoningModel;
+  if (!reasoning || reasoning === "off" || !kiroModel.effortSchemaPath) return undefined;
+  const effort = kiroModel.thinkingLevelMap?.[reasoning] ?? reasoning;
+  if (!effort) return undefined;
+  return { [kiroModel.effortSchemaPath]: { effort } };
+}
+
 function getHeaderCaseInsensitive(headers: ProviderHeaders | undefined, name: string): string | undefined {
   if (!headers) return undefined;
   const normalizedName = name.toLowerCase();
@@ -498,6 +513,8 @@ function buildRequest(model: Model<Api>, context: Context, config: ExtensionConf
   }
   const request: KiroRequest = { conversationState };
   if (profileArn) request.profileArn = profileArn;
+  const additionalModelRequestFields = effortRequestFields(model, options);
+  if (additionalModelRequestFields) request.additionalModelRequestFields = additionalModelRequestFields;
 
   const maxTokens = resolveMaxTokens(model, options);
   if (!amazonQEndpoint && (maxTokens || options?.temperature !== undefined)) {

@@ -153,6 +153,66 @@ test("Kiro forwards model profile ARN into request payload", async () => {
   }
 });
 
+test("Kiro forwards Pi reasoning level using discovered reasoning effort schema", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestBody;
+  try {
+    globalThis.fetch = async (_url, init) => {
+      requestBody = JSON.parse(init.body);
+      return createResponse([]);
+    };
+
+    const stream = createKiroStream({
+      apiKey: "token",
+      providerId: "kiro",
+      upstreamUrl: "https://kiro.example.invalid/generate",
+      requestTimeoutMs: 1_000,
+    }, {}, createLogger())({
+      ...createModel(),
+      reasoning: true,
+      thinkingLevelMap: { off: null, low: "low", medium: "medium", high: "high" },
+      effortSchemaPath: "reasoning",
+    }, {
+      messages: [{ role: "user", content: "Think carefully" }],
+    }, { reasoning: "high" });
+
+    for await (const _event of stream) {}
+    assert.deepEqual(requestBody.additionalModelRequestFields, { reasoning: { effort: "high" } });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Kiro omits effort fields when Pi thinking is off", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestBody;
+  try {
+    globalThis.fetch = async (_url, init) => {
+      requestBody = JSON.parse(init.body);
+      return createResponse([]);
+    };
+
+    const stream = createKiroStream({
+      apiKey: "token",
+      providerId: "kiro",
+      upstreamUrl: "https://kiro.example.invalid/generate",
+      requestTimeoutMs: 1_000,
+    }, {}, createLogger())({
+      ...createModel(),
+      reasoning: true,
+      thinkingLevelMap: { off: null, low: "low", high: "high" },
+      effortSchemaPath: "output_config",
+    }, {
+      messages: [{ role: "user", content: "Do not reason visibly" }],
+    }, { reasoning: "off" });
+
+    for await (const _event of stream) {}
+    assert.equal(requestBody.additionalModelRequestFields, undefined);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("Kiro serializes Pi image content using CodeWhisperer image blocks", async () => {
   const originalFetch = globalThis.fetch;
   let requestBody;

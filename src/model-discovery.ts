@@ -245,7 +245,10 @@ export function normalizeDiscoveredModels(response: { models?: unknown; defaultM
       importOwnership: "model-discovery",
       ...(profileHeaders ? { headers: profileHeaders } : {}),
     };
-    if (effort) output.thinkingLevelMap = thinkingLevelMap(effort.levels);
+    if (effort) {
+      output.thinkingLevelMap = thinkingLevelMap(effort.levels);
+      output.effortSchemaPath = effort.path;
+    }
     const rateMultiplier = positiveNumber(model.rateMultiplier);
     if (rateMultiplier !== undefined) output.rateMultiplier = rateMultiplier;
     const rateUnit = nonEmptyString(model.rateUnit);

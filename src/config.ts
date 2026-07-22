@@ -17,8 +17,11 @@ export interface KiroPromptCachingConfig {
   minimumTokensPerCacheCheckpoint?: number;
 }
 
+export type KiroEffortSchemaPath = "reasoning" | "output_config";
+
 export type KiroProviderModelConfig = ProviderModelConfig & {
   thinkingLevelMap?: ThinkingLevelMap;
+  effortSchemaPath?: KiroEffortSchemaPath;
   importOwnership?: "model-discovery" | "manual" | string;
   rateMultiplier?: number;
   rateUnit?: string;
@@ -83,8 +86,19 @@ const ANTHROPIC_MAX_REASONING_MAP = { ...ANTHROPIC_REASONING_MAP, xhigh: "max" }
 
 function defaultThinkingLevelMapForModel(id: string, name: string): ThinkingLevelMap | undefined {
   const identity = `${id} ${name}`.toLowerCase();
+  if (/gpt[-\s_/]*5[.-]?6\b/.test(identity)) return { off: null, minimal: "none", low: "none", medium: "max", high: "max", xhigh: "max" };
+  if (/claude[-\s_/]*(?:sonnet[-\s_/]*5|opus[-\s_/]*4[.-]?8|opus[-\s_/]*4[.-]?7|opus[-\s_/]*4[.-]?6|sonnet[-\s_/]*4[.-]?6)\b/.test(identity)) {
+    return { off: null, minimal: "low", low: "low", medium: "max", high: "max", xhigh: "max" };
+  }
   if (/claude[-\s_/]*opus[-\s_/]*4[.-]?7\b/.test(identity)) return { ...ANTHROPIC_OPUS_4_7_REASONING_MAP };
   if (/claude[-\s_/]*(?:opus|sonnet)[-\s_/]*4[.-]?6\b/.test(identity)) return { ...ANTHROPIC_MAX_REASONING_MAP };
+  return undefined;
+}
+
+function defaultEffortSchemaPathForModel(id: string, name: string): KiroEffortSchemaPath | undefined {
+  const identity = `${id} ${name}`.toLowerCase();
+  if (/gpt[-\s_/]*5[.-]?6\b/.test(identity)) return "reasoning";
+  if (/claude[-\s_/]*(?:sonnet[-\s_/]*5|opus[-\s_/]*4[.-]?8|opus[-\s_/]*4[.-]?7|opus[-\s_/]*4[.-]?6|sonnet[-\s_/]*4[.-]?6)\b/.test(identity)) return "output_config";
   return undefined;
 }
 
@@ -217,6 +231,11 @@ function thinkingLevelMapOr(value: unknown, fallback?: ThinkingLevelMap): Thinki
   return Object.keys(parsed).length > 0 ? parsed : fallback ? { ...fallback } : undefined;
 }
 
+function effortSchemaPathOr(value: unknown, fallback?: KiroEffortSchemaPath): KiroEffortSchemaPath | undefined {
+  if (value === "reasoning" || value === "output_config") return value;
+  return fallback;
+}
+
 function promptCachingOr(value: unknown, fallback?: KiroPromptCachingConfig): KiroPromptCachingConfig | undefined {
   if (!isRecord(value)) return fallback ? { ...fallback } : undefined;
   if (typeof value.supportsPromptCaching !== "boolean") return fallback ? { ...fallback } : undefined;
@@ -257,6 +276,7 @@ function modelDefaultsFrom(raw: Record<string, unknown>, warnings: string[]): Om
     api: KIRO_API,
     reasoning: booleanOr(defaults.reasoning, DEFAULT_MODEL_DEFAULTS.reasoning),
     thinkingLevelMap: thinkingLevelMapOr(defaults.thinkingLevelMap),
+    effortSchemaPath: effortSchemaPathOr(defaults.effortSchemaPath),
     input: inputOr(defaults.input, DEFAULT_MODEL_DEFAULTS.input),
     contextWindow: numberOr(defaults.contextWindow, DEFAULT_MODEL_DEFAULTS.contextWindow),
     maxTokens: numberOr(defaults.maxTokens, DEFAULT_MODEL_DEFAULTS.maxTokens),
@@ -274,6 +294,9 @@ function normalizeModel(rawModel: unknown, defaults: Omit<KiroProviderModelConfi
   if (!id) return null;
   const name = stringOr(rawModel.name, id);
   const thinkingLevelMap = thinkingLevelMapOr(rawModel.thinkingLevelMap, defaults.thinkingLevelMap) ?? defaultThinkingLevelMapForModel(id, name);
+  const effortSchemaPath = rawModel.effortSchemaPath === "reasoning" || rawModel.effortSchemaPath === "output_config"
+    ? rawModel.effortSchemaPath
+    : effortSchemaPathOr(defaults.effortSchemaPath) ?? defaultEffortSchemaPathForModel(id, name);
 
   const model: KiroProviderModelConfig = {
     id,
@@ -281,6 +304,7 @@ function normalizeModel(rawModel: unknown, defaults: Omit<KiroProviderModelConfi
     api: KIRO_API,
     reasoning: booleanOr(rawModel.reasoning, defaults.reasoning),
     thinkingLevelMap,
+    effortSchemaPath,
     input: inputOr(rawModel.input, defaults.input),
     contextWindow: numberOr(rawModel.contextWindow, defaults.contextWindow),
     maxTokens: numberOr(rawModel.maxTokens, defaults.maxTokens),
@@ -293,7 +317,7 @@ function normalizeModel(rawModel: unknown, defaults: Omit<KiroProviderModelConfi
     promptCaching: promptCachingOr(rawModel.promptCaching, defaults.promptCaching),
   };
 
-  for (const key of ["thinkingLevelMap", "headers", "compat", "importOwnership", "rateMultiplier", "rateUnit", "promptCaching"] as const) {
+  for (const key of ["thinkingLevelMap", "effortSchemaPath", "headers", "compat", "importOwnership", "rateMultiplier", "rateUnit", "promptCaching"] as const) {
     if (model[key] === undefined) delete model[key];
   }
   return model;
