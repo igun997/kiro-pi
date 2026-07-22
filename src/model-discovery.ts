@@ -225,7 +225,7 @@ function tokenType(authMethod: string | undefined): string | undefined {
   return undefined;
 }
 
-function profileFromSqlite(): string | undefined {
+export function readKiroCliProfileArn(): string | undefined {
   try {
     // node:sqlite is available in the Node versions used by current Pi/Kiro.
     // Keep this dynamic so older Node versions can still use token discovery.
@@ -252,7 +252,7 @@ function authFromContext(context: RefreshModelsContext): KiroCliAuth | undefined
   const credential = context.credential;
   if (credential?.type === "oauth" && nonEmptyString(credential.access)) {
     const localAuth = readKiroCliAuth();
-    const profileArn = profileArnFromCredentials(credential) ?? nonEmptyString(context.profileArn) ?? localAuth?.profileArn ?? profileFromSqlite();
+    const profileArn = profileArnFromCredentials(credential) ?? nonEmptyString(context.profileArn) ?? localAuth?.profileArn ?? readKiroCliProfileArn();
     return {
       accessToken: credential.access,
       region: nonEmptyString(credential.region) ?? localAuth?.region ?? DEFAULT_REGION,
@@ -262,7 +262,7 @@ function authFromContext(context: RefreshModelsContext): KiroCliAuth | undefined
   }
   const auth = readKiroCliAuth();
   if (!auth) return undefined;
-  return auth.profileArn ? auth : { ...auth, profileArn: profileFromSqlite() };
+  return auth.profileArn ? auth : { ...auth, profileArn: readKiroCliProfileArn() };
 }
 
 export async function discoverKiroModels(context: RefreshModelsContext): Promise<KiroProviderModelConfig[]> {
