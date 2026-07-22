@@ -338,6 +338,40 @@ test("Kiro replays redacted reasoning content and signature on follow-up turns",
   }
 });
 
+test("Kiro treats synthetic terminal placeholder as signature-only reasoning", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => createResponse([
+      ["assistantResponseEvent", { content: "answer" }],
+      ["reasoningContentEvent", {
+        text: "...",
+        signature: "sig",
+      }],
+    ]);
+
+    const stream = createKiroStream({
+      apiKey: "token",
+      providerId: "kiro",
+      upstreamUrl: "https://kiro.example.invalid/generate",
+      requestTimeoutMs: 1_000,
+    }, {}, createLogger())({ ...createModel(), reasoning: true }, {
+      messages: [{ role: "user", content: "Explain" }],
+    });
+
+    const events = [];
+    for await (const event of stream) events.push(event);
+    const message = await stream.result();
+
+    assert.equal(events.some((event) => event.type === "thinking_delta"), false);
+    assert.deepEqual(message.content, [
+      { type: "text", text: "answer" },
+      { type: "thinking", thinking: "", thinkingSignature: "sig" },
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("Kiro exposes reasoning content and token usage metadata", async () => {
   const originalFetch = globalThis.fetch;
   try {

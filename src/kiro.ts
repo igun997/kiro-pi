@@ -844,9 +844,17 @@ function getPayloadText(payload: JsonRecord, keys: readonly string[]): string {
   return "";
 }
 
+const ANSI_SGR_PATTERN = /\u001b\[[0-9;:]*m/g;
+const SYNTHETIC_THINKING_PLACEHOLDER_PATTERN = /^(?:Thinking:\s*)?(?:\.\.\.|…)$/i;
+
+function visibleReasoningText(text: string): string {
+  const plainText = text.replace(ANSI_SGR_PATTERN, "").trim();
+  return SYNTHETIC_THINKING_PLACEHOLDER_PATTERN.test(plainText) ? "" : text;
+}
+
 function reasoningPayload(payload: JsonRecord): { text: string; signature?: string; redactedContent?: string } {
   const nested = isRecord(payload.reasoningContentEvent) ? payload.reasoningContentEvent : payload;
-  const text = getPayloadText(nested, ["text", "content"]);
+  const text = visibleReasoningText(getPayloadText(nested, ["text", "content"]));
   const signature = optionalString(nested.signature);
   const redactedContent = optionalString(nested.redactedContent);
   return { text, ...(signature ? { signature } : {}), ...(redactedContent !== undefined ? { redactedContent } : {}) };
