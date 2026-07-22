@@ -61,6 +61,7 @@ test("OAuth discovery uses supplied profile ARN when credential omits it", async
 
     assert.equal(requestBody.profileArn, "arn:aws:codewhisperer:us-east-1:123:profile/test");
     assert.equal(models[0].id, "gpt-5.6-luna");
+    assert.equal(models[0].headers?.["x-kiro-profile-arn"], "arn:aws:codewhisperer:us-east-1:123:profile/test");
   } finally {
     globalThis.fetch = originalFetch;
   }

@@ -177,8 +177,9 @@ function positiveNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
 }
 
-export function normalizeDiscoveredModels(response: { models?: unknown; defaultModel?: unknown }): KiroProviderModelConfig[] {
+export function normalizeDiscoveredModels(response: { models?: unknown; defaultModel?: unknown }, profileArn?: string): KiroProviderModelConfig[] {
   if (!Array.isArray(response.models)) return [];
+  const profileHeaders = profileArn ? { ["x-kiro-profile-arn"]: profileArn } : undefined;
   return response.models.flatMap((raw): KiroProviderModelConfig[] => {
     if (!isRecord(raw)) return [];
     const model = raw as DiscoveredModel;
@@ -197,6 +198,7 @@ export function normalizeDiscoveredModels(response: { models?: unknown; defaultM
       contextWindow,
       maxTokens: MAX_OUTPUT_TOKENS,
       importOwnership: "model-discovery",
+      ...(profileHeaders ? { headers: profileHeaders } : {}),
     };
     if (effort) output.thinkingLevelMap = thinkingLevelMap(effort.levels);
     const rateMultiplier = positiveNumber(model.rateMultiplier);
@@ -283,7 +285,7 @@ export async function discoverKiroModels(context: RefreshModelsContext): Promise
     });
     if (!response.ok) throw new Error(`Kiro model discovery failed with HTTP ${response.status}.`);
     const payload = (await response.json()) as ModelCatalogResponse;
-    models.push(...normalizeDiscoveredModels(payload));
+    models.push(...normalizeDiscoveredModels(payload, auth.profileArn));
     const candidate = nonEmptyString(payload.nextToken);
     if (!candidate) break;
     nextToken = candidate;
