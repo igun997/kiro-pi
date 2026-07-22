@@ -4,6 +4,7 @@ import { createServer, type Server, type ServerResponse } from "node:http";
 import type { OAuthCredentials, OAuthLoginCallbacks, OAuthProviderInterface } from "@earendil-works/pi-ai/oauth";
 
 import type { KiroAuthMethod, KiroOAuthConfig } from "./config.js";
+import { readKiroCliLoginConfig } from "./model-discovery.js";
 import { redactSensitiveString } from "./debug-logger.js";
 import type { DebugLogger } from "./debug-logger.js";
 import { isRecord, nonEmptyString, type JsonRecord, positiveFiniteNumber as numericSeconds, KIRO_PROFILE_ARN_HEADER, readJsonResponse, applyProfileArnToModels, resolveOAuthProviderIdentity } from "./shared/index.js";
@@ -44,6 +45,7 @@ export class KiroOAuthFailureError extends Error {
 
 const DEFAULT_TOKEN_EXPIRES_IN_SECONDS = 3600;
 const DEFAULT_OAUTH_REQUEST_TIMEOUT_MS = 300_000;
+const DEFAULT_BUILDER_ID_START_URL = "https://view.awsapps.com/start";
 const AUTH_METHODS = ["builder-id", "google", "github"] as const satisfies readonly KiroAuthMethod[];
 const SOCIAL_AUTH_METHODS = ["google", "github"] as const satisfies readonly KiroAuthMethod[];
 const SOCIAL_IDP_BY_METHOD: Record<(typeof SOCIAL_AUTH_METHODS)[number], string> = {
@@ -428,9 +430,17 @@ async function startLocalCallbackServer(config: KiroOAuthConfig, authMethod: (ty
   };
 }
 
+export function resolveBuilderIdLoginConfig(config: KiroOAuthConfig, cliLogin = readKiroCliLoginConfig()): KiroOAuthConfig {
+  // Kiro CLI stores account-specific Builder ID routing metadata. Reuse only
+  // start URL and region; bearer credentials remain isolated in CLI storage.
+  if (config.startUrl !== DEFAULT_BUILDER_ID_START_URL || !cliLogin) return config;
+  return { ...config, region: cliLogin.region, startUrl: cliLogin.startUrl };
+}
+
 async function loginWithBuilderId(config: KiroOAuthConfig, callbacks: OAuthLoginCallbacks, logger: DebugLogger): Promise<KiroCredentials> {
-  const client = await registerClient(config);
-  const device = await requestDeviceCode(config, client);
+  const loginConfig = resolveBuilderIdLoginConfig(config);
+  const client = await registerClient(loginConfig);
+  const device = await requestDeviceCode(loginConfig, client);
   const deviceCode = nonEmptyString(device.deviceCode);
   const userCode = nonEmptyString(device.userCode);
   const verificationUri = nonEmptyString(device.verificationUri);
@@ -449,7 +459,7 @@ async function loginWithBuilderId(config: KiroOAuthConfig, callbacks: OAuthLogin
 
   while (Date.now() < deadline) {
     await wait(nextIntervalMs, callbacks.signal);
-    const token = await pollDeviceToken(config, client, deviceCode);
+    const token = await pollDeviceToken(loginConfig, client, deviceCode);
     const access = nonEmptyString(token.accessToken);
     if (access) {
       const refresh = nonEmptyString(token.refreshToken);
@@ -460,7 +470,7 @@ async function loginWithBuilderId(config: KiroOAuthConfig, callbacks: OAuthLogin
         expires: expiresAt(token.expiresIn),
         clientId: client.clientId,
         clientSecret: client.clientSecret,
-        region: config.region,
+        region: loginConfig.region,
         authMethod: "builder-id",
       };
     }

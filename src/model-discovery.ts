@@ -31,6 +31,11 @@ export interface KiroCliAuth {
   authMethod?: string;
 }
 
+export interface KiroCliLoginConfig {
+  region: string;
+  startUrl: string;
+}
+
 interface DiscoveredModel {
   modelId?: unknown;
   modelName?: unknown;
@@ -71,6 +76,21 @@ function parseJson(value: string | undefined): Record<string, unknown> | undefin
 function profileArnFromValue(value: string | undefined): string | undefined {
   const parsed = parseJson(value);
   return nonEmptyString(parsed?.arn) ?? nonEmptyString(parsed?.profileArn);
+}
+
+function loginConfigFromValue(value: string | undefined): KiroCliLoginConfig | undefined {
+  const parsed = parseJson(value);
+  const startUrl = nonEmptyString(parsed?.startUrl) ?? nonEmptyString(parsed?.start_url);
+  if (!startUrl) return undefined;
+  try {
+    if (new URL(startUrl).protocol !== "https:") return undefined;
+  } catch {
+    return undefined;
+  }
+  return {
+    region: nonEmptyString(parsed?.region) ?? DEFAULT_REGION,
+    startUrl,
+  };
 }
 
 function tokenFromValue(value: string | undefined, fallbackAuthMethod?: string): KiroCliAuth | undefined {
@@ -120,6 +140,23 @@ function readSqliteAuthValues(): LocalKiroAuthValues {
     return {};
   } finally {
     database?.close();
+  }
+}
+
+export function readKiroCliLoginConfig(input?: { tokenValue?: string; authKvValue?: string; authKvValues?: Record<string, string | undefined> }): KiroCliLoginConfig | undefined {
+  const sqliteValues = input === undefined ? readSqliteAuthValues() : {};
+  const explicitToken = input?.tokenValue ?? input?.authKvValue;
+  if (explicitToken !== undefined) return loginConfigFromValue(explicitToken);
+
+  const authKvValues = input?.authKvValues ?? sqliteValues.authKvValues;
+  const builderIdConfig = loginConfigFromValue(authKvValues?.["kirocli:odic:token"]);
+  if (builderIdConfig) return builderIdConfig;
+
+  if (input !== undefined) return undefined;
+  try {
+    return loginConfigFromValue(readFileSync(KIRO_TOKEN_CACHE, "utf8"));
+  } catch {
+    return undefined;
   }
 }
 

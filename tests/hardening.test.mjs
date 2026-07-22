@@ -12,7 +12,7 @@ const fromBuild = (path) => pathToFileURL(join(buildDir, path)).href;
 const { loadConfig } = await import(fromBuild("src/config.js"));
 const { redactForDebugLog } = await import(fromBuild("src/debug-logger.js"));
 const { classifyKiroHttpFailure, buildHeaders } = await import(fromBuild("src/kiro.js"));
-const { classifyKiroOAuthFailure, createKiroOAuthProvider } = await import(fromBuild("src/oauth.js"));
+const { classifyKiroOAuthFailure, createKiroOAuthProvider, resolveBuilderIdLoginConfig } = await import(fromBuild("src/oauth.js"));
 const { default: kiroProviderExtension } = await import(fromBuild("src/index.js"));
 
 const RUNTIME_PROVIDER_REGISTRATION_EVENT = "pi-multi-auth:runtime-provider-registration";
@@ -282,6 +282,19 @@ test("default model metadata matches Kiro ListAvailableModels discovery", () => 
     assert.ok(byId.has(modelId), `static catalog missing ${modelId}`);
   }
   assert.deepEqual(byId.get("deepseek-3.2")?.promptCaching, { supportsPromptCaching: false });
+});
+
+test("Builder ID login reuses CLI account routing only when config uses generic default", () => {
+  const cliLogin = { region: "eu-west-1", startUrl: "https://d-account.awsapps.com/start" };
+  const generic = createOAuthConfig({ startUrl: "https://view.awsapps.com/start" });
+  assert.deepEqual(resolveBuilderIdLoginConfig(generic, cliLogin), {
+    ...generic,
+    region: "eu-west-1",
+    startUrl: "https://d-account.awsapps.com/start",
+  });
+
+  const explicit = createOAuthConfig({ startUrl: "https://custom.awsapps.com/start" });
+  assert.deepEqual(resolveBuilderIdLoginConfig(explicit, cliLogin), explicit);
 });
 
 test("OAuth social login uses single kiro provider id with exact state verification and callback paste", async () => {

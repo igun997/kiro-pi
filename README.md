@@ -136,7 +136,7 @@ Kiro CLI credentials are read-only and currently used for live model discovery. 
 - `~/.aws/sso/cache/kiro-auth-token.json`
 - `~/.local/share/kiro-cli/data.sqlite3`
 
-Provider never writes or refreshes Kiro CLI files. If CLI authentication expires, authenticate again with `kiro-cli` or use `/login kiro` for Pi.
+Provider never writes or refreshes Kiro CLI files. If CLI authentication expires, authenticate again with `kiro-cli` or use `/login kiro` for Pi. When default Builder ID settings are used, Pi reads account-specific Builder ID `start_url` and region from local Kiro CLI metadata so Pi login targets same account; it never reuses CLI bearer tokens.
 
 When network discovery is available, `kiro-pi` calls Kiro's regional management endpoint and imports account-visible model IDs, display names, context limits, reasoning levels, and rate metadata. Discovery refreshes at provider startup, session start/reload, and multi-auth readiness events. If discovery fails or runs without valid local CLI or event-provided auth, the last-known or built-in fallback models remain available.
 

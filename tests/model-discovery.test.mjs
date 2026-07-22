@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 const buildDir = process.env.PI_KIRO_PROVIDER_BUILD_DIR;
 if (!buildDir) throw new Error("PI_KIRO_PROVIDER_BUILD_DIR is required.");
 const fromBuild = (path) => pathToFileURL(join(buildDir, path)).href;
-const { discoverKiroModels, normalizeDiscoveredModels, readKiroCliAuth } = await import(fromBuild("src/model-discovery.js"));
+const { discoverKiroModels, normalizeDiscoveredModels, readKiroCliAuth, readKiroCliLoginConfig } = await import(fromBuild("src/model-discovery.js"));
 
 test("normalizeDiscoveredModels maps Kiro catalog metadata to Pi models", () => {
   const models = normalizeDiscoveredModels({
@@ -122,4 +122,36 @@ test("readKiroCliAuth falls back to social SQLite token shapes", () => {
 test("readKiroCliAuth rejects expired or incomplete cache", () => {
   assert.equal(readKiroCliAuth({ tokenValue: JSON.stringify({ access_token: "secret", expires_at: "2000-01-01T00:00:00.000Z" }) }), undefined);
   assert.equal(readKiroCliAuth({ expiresAt: new Date(Date.now() + 60_000).toISOString() }), undefined);
+});
+
+test("readKiroCliLoginConfig reads account-specific Builder ID start URL without requiring valid token", () => {
+  const login = readKiroCliLoginConfig({
+    authKvValues: {
+      "kirocli:odic:token": JSON.stringify({
+        access_token: "expired-secret",
+        expires_at: "2000-01-01T00:00:00.000Z",
+        region: "us-east-1",
+        start_url: "https://d-example.awsapps.com/start",
+        oauth_flow: "PKCE",
+      }),
+    },
+  });
+
+  assert.deepEqual(login, {
+    region: "us-east-1",
+    startUrl: "https://d-example.awsapps.com/start",
+  });
+});
+
+test("readKiroCliLoginConfig ignores social tokens and malformed start URLs", () => {
+  assert.equal(readKiroCliLoginConfig({
+    authKvValues: {
+      "kirocli:social:token": JSON.stringify({ start_url: "https://d-social.awsapps.com/start", region: "us-east-1" }),
+    },
+  }), undefined);
+  assert.equal(readKiroCliLoginConfig({
+    authKvValues: {
+      "kirocli:odic:token": JSON.stringify({ start_url: "http://example.test/start", region: "us-east-1" }),
+    },
+  }), undefined);
 });
