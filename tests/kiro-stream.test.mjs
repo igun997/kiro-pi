@@ -125,6 +125,34 @@ test("Kiro toolUseEvent updates same-id tool calls with latest complete argument
   }
 });
 
+test("Kiro forwards model profile ARN into request payload", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestBody;
+  try {
+    globalThis.fetch = async (_url, init) => {
+      requestBody = JSON.parse(init.body);
+      return createResponse([]);
+    };
+
+    const stream = createKiroStream({
+      apiKey: "token",
+      providerId: "kiro",
+      upstreamUrl: "https://kiro.example.invalid/generate",
+      requestTimeoutMs: 1_000,
+    }, {}, createLogger())({
+      ...createModel(),
+      headers: { "x-kiro-profile-arn": "arn:aws:codewhisperer:us-east-1:123:profile/test" },
+    }, {
+      messages: [{ role: "user", content: "Reply OK" }],
+    });
+
+    for await (const _event of stream) {}
+    assert.equal(requestBody.profileArn, "arn:aws:codewhisperer:us-east-1:123:profile/test");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("Kiro serializes Pi image content using CodeWhisperer image blocks", async () => {
   const originalFetch = globalThis.fetch;
   let requestBody;

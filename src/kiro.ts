@@ -483,7 +483,9 @@ function buildRequest(model: Model<Api>, context: Context, config: ExtensionConf
   prependSystemInstructionHistory(history, buildSystemPrefix(context), model.id);
   const amazonQEndpoint = isAmazonQEndpoint(config);
   if (amazonQEndpoint) setUserMessageOrigin(history, currentMessage, "KIRO_CLI");
-  const profileArn = getHeaderCaseInsensitive(options?.headers, KIRO_PROFILE_ARN_HEADER) ?? config.profileArn;
+  const profileArn = getHeaderCaseInsensitive(model.headers, KIRO_PROFILE_ARN_HEADER)
+    ?? getHeaderCaseInsensitive(options?.headers, KIRO_PROFILE_ARN_HEADER)
+    ?? config.profileArn;
   const conversationState: KiroRequest["conversationState"] = {
     chatTriggerType: "MANUAL",
     conversationId: uuidFromHash((firstContent || currentMessage.userInputMessage.content).slice(0, 4_000)) || randomUUID(),
