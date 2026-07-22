@@ -612,7 +612,7 @@ function classifyAuthReason(status: number, payload: JsonRecord): KiroAuthFailur
   const text = payloadSearchText(payload);
   if (/quota|entitlement|subscription|billing|plan|limit exceeded|too many requests/.test(text)) return "quota_or_entitlement";
   if (/auth[_-]?expired|token expired|expired token|expired.*token/.test(text)) return "auth_expired";
-  if (/auth[_-]?rejected|token rejected|invalid token|invalid[_-]?grant|unauthorized/.test(text)) return "auth_rejected";
+  if (/auth[_-]?rejected|token rejected|invalid token|invalid[_-]?grant|invalid bearer|bearer token.*invalid|unauthorized/.test(text)) return "auth_rejected";
   return status === 403 ? "forbidden" : "http_error";
 }
 

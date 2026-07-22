@@ -225,6 +225,10 @@ test("Kiro HTTP auth failures expose refreshable metadata without treating quota
   assert.equal(rejected.kiroAuth.refreshable, true);
   assert.equal(rejected.kiroAuth.reason, "auth_rejected");
 
+  const invalidBearer = classifyKiroHttpFailure(403, { message: "The bearer token included in the request is invalid." }, "managed");
+  assert.equal(invalidBearer.kiroAuth.refreshable, true);
+  assert.equal(invalidBearer.kiroAuth.reason, "auth_rejected");
+
   const quota = classifyKiroHttpFailure(403, { message: "quota exceeded for this entitlement" }, "managed");
   assert.equal(quota.kiroAuth.refreshable, false);
   assert.equal(quota.kiroAuth.reason, "quota_or_entitlement");
