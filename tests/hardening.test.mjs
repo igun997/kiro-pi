@@ -274,6 +274,9 @@ test("default model metadata matches Kiro ListAvailableModels discovery", () => 
     minimumTokensPerCacheCheckpoint: 4_096,
   });
   assert.equal(byId.get("claude-sonnet-4.6")?.thinkingLevelMap?.xhigh, "max");
+  for (const modelId of ["claude-sonnet-5", "claude-opus-4.8", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]) {
+    assert.ok(byId.has(modelId), `static catalog missing ${modelId}`);
+  }
   assert.deepEqual(byId.get("deepseek-3.2")?.promptCaching, { supportsPromptCaching: false });
 });
 
