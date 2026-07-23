@@ -111,6 +111,24 @@ Set any discovered model with:
 
 `auto` remains available as a fallback. Model IDs depend on Kiro account entitlements and region.
 
+### Check account usage
+
+Inspect your Kiro credit balance, plan, and reset date without leaving Pi:
+
+```text
+/kiro-usage
+```
+
+The agent can also read the same data through the `kiro_usage` tool (ask it something like "how many Kiro credits do I have left?"). Both surfaces call Kiro's `GetUsageLimits` API, mirroring the `kiro-cli` `/usage` card, and report:
+
+- Subscription plan (e.g. KIRO FREE, KIRO PRO) and type
+- Monthly credits used, limit, remaining, and percent with a progress bar
+- Reset date and days remaining
+- Overage status, rate, and cap when the plan supports overages
+- Bonus / free-trial credits when present
+
+Usage lookups reuse the same credential selection as model discovery: Pi's managed `kiro` OAuth credential first, then read-only local Kiro CLI state. The bearer token is sent only to Kiro's endpoint and is never logged.
+
 ## Features
 
 - Streaming Kiro responses through Pi's provider API
@@ -119,6 +137,7 @@ Set any discovered model with:
 - Streamed reasoning text, signatures, and redacted reasoning replay
 - Tool calls and fragmented tool input handling
 - Token usage, cache usage, rate metadata, and metering diagnostics
+- Account credit usage checks via the `/kiro-usage` command and `kiro_usage` tool
 - AWS Builder ID, Google, and GitHub OAuth flows
 - Optional Kiro profile ARN support
 - Authorization-header hardening so configured headers cannot override managed credentials

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.1] - 2026-07-23
+
+Initial public release of `kiro-pi` on npm.
+
+### Added
+- Streaming Kiro provider for Pi backed by Kiro's AWS CodeWhisperer-compatible API, with text and image input, streamed reasoning, tool calls, token/metering diagnostics, and Authorization-header hardening.
+- AWS Builder ID, Google, and GitHub OAuth sign-in plus account-visible model discovery, with read-only reuse of local Kiro CLI credentials.
+- Kiro account usage checks: the `/kiro-usage` command and the `kiro_usage` tool report credit usage, remaining balance, subscription plan, overage status, and monthly reset date via Kiro's `GetUsageLimits` API. Uses the managed `kiro` OAuth credential and falls back to read-only Kiro CLI state.
+- GitHub Actions CI (`npm run check` on Node 20 and 22) and a tag-driven release workflow that publishes to npm on `v*.*.*` tags.
+
+> The version history below (0.1.x-0.2.x) is inherited lineage from [`MasuRii/pi-kiro-provider`](https://github.com/MasuRii/pi-kiro-provider) and predates the independent `kiro-pi` npm package.
+
 ## [0.2.2] - 2026-07-03
 
 ### Changed

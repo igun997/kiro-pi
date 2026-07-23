@@ -1,6 +1,6 @@
 {
   "name": "kiro-pi",
-  "version": "0.2.2",
+  "version": "0.0.1",
   "private": false,
   "description": "Pi extension provider for Kiro's AWS CodeWhisperer streaming API.",
   "type": "module",
@@ -35,14 +35,9 @@
   "keywords": [
     "pi-package",
     "pi",
-    "pi-extension",
-    "pi-coding-agent",
-    "kiro",
-    "provider",
-    "ai-provider",
-    "oauth",
-    "codewhisperer",
-    "amazon-q"
+    "kiroaws",
+    "codewhispererai",
+    "provider"
   ],
   "author": "igun997",
   "license": "MIT",

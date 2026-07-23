@@ -1,7 +1,9 @@
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
+
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { Api, AssistantMessage, AssistantMessageEvent, AssistantMessageEventStream, Context, Credential, Model, SimpleStreamOptions } from "@earendil-works/pi-ai";
 import type { OAuthCredentials, OAuthLoginCallbacks } from "@earendil-works/pi-ai/oauth";
 import { KIRO_API, type ExtensionConfig, loadConfig } from "./config.js";
@@ -10,6 +12,8 @@ import type { DebugLogger as DebugLoggerInstance } from "./debug-logger.js";
 import { omitAuthorizationHeaders } from "./headers.js";
 import { createKiroOAuthProvider } from "./oauth.js";
 import { createKiroModelRefresher, attachProfileArnToModels, discoverKiroModels, readKiroCliProfileArn, type RefreshModelsContext } from "./model-discovery.js";
+import { formatKiroUsage, getKiroUsage, KiroUsageError } from "./usage.js";
+import { isRecord } from "./shared/index.js";
 
 const EXTENSION_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const RUNTIME_PROVIDER_REGISTRATION_EVENT = "pi-multi-auth:runtime-provider-registration";
@@ -39,6 +43,84 @@ function credentialFromEvent(payload: unknown): Credential | undefined {
   return undefined;
 }
 type KiroStreamSimple = (model: Model<Api>, context: Context, options?: SimpleStreamOptions) => AssistantMessageEventStream;
+
+type KiroCredentialRegistry = {
+  authStorage?: { get?(provider: string): unknown };
+  getApiKeyForProvider?(provider: string): Promise<string | undefined>;
+};
+
+/**
+ * Resolve Pi's managed credential for the Kiro provider inside a command or
+ * tool context. Returns the stored OAuth credential with a freshly refreshed
+ * access token when available. Returns undefined so usage lookups fall back to
+ * read-only Kiro CLI state.
+ */
+async function resolveManagedKiroCredential(ctx: ExtensionContext, providerId: string): Promise<Credential | undefined> {
+  const registry = (ctx as { modelRegistry?: KiroCredentialRegistry }).modelRegistry;
+  const stored = registry?.authStorage?.get?.(providerId);
+  const base = isRecord(stored) && stored.type === "oauth" ? { ...stored } : undefined;
+  let fresh: string | undefined;
+  try {
+    fresh = await registry?.getApiKeyForProvider?.(providerId);
+  } catch {
+    fresh = undefined;
+  }
+  if (base) {
+    if (fresh) base.access = fresh;
+    return base as unknown as Credential;
+  }
+  if (fresh) return { type: "oauth", access: fresh } as unknown as Credential;
+  return undefined;
+}
+
+function registerKiroUsageFeatures(pi: ExtensionAPI, config: ExtensionConfig, logger: DebugLoggerInstance): void {
+  const runUsage = async (ctx: ExtensionContext, signal: AbortSignal | undefined): Promise<{ text: string; usage: unknown; source: string } | { error: string; reauth: boolean }> => {
+    try {
+      const credential = await resolveManagedKiroCredential(ctx, config.providerId);
+      const { usage, source } = await getKiroUsage(config, credential, { signal });
+      logger.debug("usage_lookup_succeeded", { providerId: config.providerId, source, resources: usage.resources.length });
+      return { text: formatKiroUsage(usage, { source }), usage, source };
+    } catch (error) {
+      const reauth = error instanceof KiroUsageError ? error.reauth : false;
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn("usage_lookup_failed", { providerId: config.providerId, reauth, error: message });
+      return { error: message, reauth };
+    }
+  };
+
+  if (typeof pi.registerCommand === "function") {
+    pi.registerCommand("kiro-usage", {
+      description: "Show Kiro account credit usage, plan, and reset date.",
+      handler: async (_args, ctx) => {
+        const result = await runUsage(ctx, ctx.signal);
+        if ("error" in result) {
+          ctx.ui.notify(result.error, "error");
+          return;
+        }
+        ctx.ui.notify(result.text, "info");
+      },
+    });
+  }
+
+  if (typeof pi.registerTool === "function") {
+    pi.registerTool({
+      name: "kiro_usage",
+      label: "Kiro Usage",
+      description: "Fetch the current Kiro account credit usage, remaining balance, subscription plan, overage status, and monthly reset date from the Kiro management API. Use when the user asks about Kiro credits, quota, usage, plan, or billing limits.",
+      promptSnippet: "kiro_usage \u2014 check Kiro credit usage, plan, and reset date",
+      parameters: Type.Object({}),
+      async execute(_toolCallId, _params, signal, _onUpdate, ctx) {
+        const result = await runUsage(ctx, signal ?? undefined);
+        if ("error" in result) {
+          return { content: [{ type: "text", text: `Kiro usage lookup failed: ${result.error}` }], details: { error: result.error, reauth: result.reauth } };
+        }
+        return { content: [{ type: "text", text: result.text }], details: { source: result.source, usage: result.usage } };
+      },
+    });
+  }
+
+  logger.debug("usage_features_registered", { providerId: config.providerId });
+}
 
 function createLazyModule<T>(importer: () => Promise<T>): { load(): Promise<T> } {
   let loaded: T | undefined;
@@ -210,6 +292,7 @@ export default function kiroProviderExtension(pi: ExtensionAPI): void {
   // Pi 0.80 typings predate refreshModels; Pi 0.81 runtime consumes this field.
   registerProvider();
   emitRuntimeProviderRegistration(true);
+  registerKiroUsageFeatures(pi, config, logger);
 
   logger.debug("provider_registered", {
     providerId: config.providerId,

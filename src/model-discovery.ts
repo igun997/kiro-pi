@@ -257,7 +257,11 @@ export function normalizeDiscoveredModels(response: { models?: unknown; defaultM
   });
 }
 
-function tokenType(authMethod: string | undefined): string | undefined {
+/**
+ * Map a Kiro CLI auth method to the `TokenType` header value the Kiro
+ * bearer services expect. Shared by model discovery and usage lookups.
+ */
+export function kiroTokenTypeHeader(authMethod: string | undefined): string | undefined {
   if (authMethod === "external_idp") return "EXTERNAL_IDP";
   if (authMethod === "machine_token") return "KIRO_MACHINE_TOKEN";
   if (authMethod === "api_key") return "API_KEY";
@@ -317,7 +321,7 @@ export async function discoverKiroModels(context: RefreshModelsContext): Promise
     "x-amz-target": "KiroControlPlaneBearerService.ListAvailableModels",
     Authorization: `Bearer ${auth.accessToken}`,
   };
-  const type = tokenType(auth.authMethod);
+  const type = kiroTokenTypeHeader(auth.authMethod);
   if (type) headers.TokenType = type;
   const models: KiroProviderModelConfig[] = [];
   let nextToken: string | undefined;
