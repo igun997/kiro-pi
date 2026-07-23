@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -23,7 +23,14 @@ try {
     writeFileSync(join(buildDir, "package.json"), JSON.stringify({ type: "module" }), "utf-8");
     const nodeModulesPath = join(root, "node_modules");
     if (existsSync(nodeModulesPath)) symlinkSync(nodeModulesPath, join(buildDir, "node_modules"), "junction");
-    const test = spawnSync(process.execPath, ["--test", "--test-concurrency=1", "tests/*.test.mjs"], {
+    // Enumerate test files explicitly: `node --test <glob>` only expands globs
+    // on Node 21+, so a literal `tests/*.test.mjs` fails on Node 20.
+    const testFiles = readdirSync(join(root, "tests"))
+      .filter((file) => file.endsWith(".test.mjs"))
+      .sort()
+      .map((file) => join("tests", file));
+    if (testFiles.length === 0) throw new Error("No test files found in tests/.");
+    const test = spawnSync(process.execPath, ["--test", "--test-concurrency=1", ...testFiles], {
       cwd: root,
       stdio: "inherit",
       env: { ...process.env, PI_KIRO_PROVIDER_BUILD_DIR: buildDir },
